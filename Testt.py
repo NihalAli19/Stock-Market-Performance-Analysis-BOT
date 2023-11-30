@@ -6,15 +6,16 @@ import plotly.graph_objects as go
 from sklearn.preprocessing import MinMaxScaler
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, LSTM
+from datetime import timedelta
 
 df = pd.read_csv("TSLA.csv")
 df["Date"] = pd.to_datetime(df["Date"])
 
 fig = go.Figure(data=[go.Candlestick(x=df["Date"],
-                                     open=df['Open'],
-                                     high=df['High'],
-                                     low=df['Low'],
-                                     close=df['Close'])])
+									 open=df['Open'],
+									 high=df['High'],
+									 low=df['Low'],
+									 close=df['Close'])])
 fig.show()
 
 data = df.dropna()
@@ -64,8 +65,6 @@ input_models = total_dataset[len(total_dataset) - len(test_data) - timetopredict
 input_models = input_models.reshape((-1, 1))
 input_models = scaler.transform(input_models)
 
-
-
 xtest = []
 
 for x in range(timetopredict, len(input_models)):
@@ -78,10 +77,54 @@ testprice = model.predict(xtest)
 
 testprice = scaler.inverse_transform(testprice)
 
-plt.plot(actual_test_price,label = "real")
-plt.plot(testprice,label = "predict")
+plt.plot(actual_test_price, label="real")
+plt.plot(testprice, label="predict")
 plt.legend()
 plt.show()
 
+from datetime import timedelta
 
+# Get the last date in the dataset
+last_date = data["Date"].max()
 
+# Generate future dates for the next 90 days
+future_dates = [last_date + timedelta(days=i) for i in range(1, 91)]
+
+# Use the last `timetopredict` days from the dataset as input for prediction
+input_future = total_dataset[-timetopredict:].values
+input_future = input_future.reshape((-1, 1))
+input_future = scaler.transform(input_future)
+
+x_future = []
+
+# Create input data for the next 90 days
+for i in range(timetopredict, timetopredict + 90):
+	x_future.append(input_future[i - timetopredict:i, 0])
+
+# Ensure that all arrays in x_future have the same length
+max_len = max(len(arr) for arr in x_future)
+x_future = [np.pad(arr, (0, max_len - len(arr))) for arr in x_future]
+
+# Concatenate the arrays to create the input for LSTM
+x_future = np.concatenate(x_future, axis=0)
+
+# Reshape for LSTM input (samples, time steps, features)
+x_future = np.reshape(x_future, (int(x_future.shape[0] / timetopredict), timetopredict, 1))
+
+# Predict future stock prices
+future_predictions = model.predict(x_future)
+
+# Inverse transform the predictions to the original scale
+future_predictions = scaler.inverse_transform(future_predictions)
+
+# Plot historical data
+plt.plot(data["Date"], data["Close"], label="Historical Data")
+
+# Plot predicted prices for the next 90 days
+plt.plot(future_dates, future_predictions, label="Future Predictions")
+
+plt.title('Historical and Future Stock Prices')
+plt.xlabel('Date')
+plt.ylabel('Close Price')
+plt.legend()
+plt.show()
